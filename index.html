@@ -5,74 +5,139 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>VERILINK</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    html, body {
-      height: 100%;
-      overflow: hidden;
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; display: flex; justify-content: center; align-items: center; background: #ffffff; font-family: Arial, sans-serif; }
+    #frame-container { width: 100vw; height: 100vh; overflow: hidden; position: relative; }
+    iframe { width: 100%; height: 100%; border: none; display: block; }
+    #disabled-overlay {
+      position: absolute;
+      inset: 0;
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
-      background: #ffffff;
+      background: #f5f5f7;
+      color: #333;
+      gap: 12px;
+      padding: 24px;
     }
-    #frame-container {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      position: relative;
-    }
-    iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
+    #disabled-overlay h1 { font-size: 28px; }
+    #disabled-overlay p { font-size: 16px; }
+    #countdown { font-weight: 600; }
+    /* Optional: visually hide iframe when not active for a cleaner UX */
+    .hidden { display: none; }
   </style>
 </head>
 <body oncontextmenu="return false;">
   <div id="frame-container">
-    <iframe
-      id="Evalsync"
-      src="https://splendid-melomakarona-38fe64.netlify.app"
-      title="TASKSYNC"
-    >
-      Your browser does not support iframes.
-    </iframe>
+    <iframe id="Evalsync" src="https://hauna-cms-fresh.netlify.app" title="TASKSYNC"></iframe>
+
+    <div id="disabled-overlay" class="hidden" aria-hidden="true">
+      <h1>Link unavailable</h1>
+      <p>The service is available daily from <strong>09:00</strong> to <strong>17:00</strong> IST.</p>
+      <p id="status-text">Current time: <span id="now-text"></span></p>
+      <p id="countdown"></p>
+    </div>
   </div>
 
   <script>
-    // Disable common DevTools shortcuts
-    document.addEventListener('keydown', function (e) {
-      // F12
-      if (e.key === 'F12') {
-        e.preventDefault();
+    // === Time check logic (IST / UTC+5:30) ===
+    function nowInIST() {
+      const now = new Date();
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const istOffsetMs = (5.5 * 60 * 60 * 1000); // +5:30 hours
+      return new Date(utc + istOffsetMs);
+    }
+
+    function formatTime(d) {
+      return d.toLocaleString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    // open window between 09:00:00 and 17:00:00 (09 inclusive, 17 exclusive)
+    const OPEN_HOUR = 9;
+    const CLOSE_HOUR = 17;
+
+    const iframe = document.getElementById('Evalsync');
+    const overlay = document.getElementById('disabled-overlay');
+    const nowText = document.getElementById('now-text');
+    const countdownEl = document.getElementById('countdown');
+
+    function checkAndToggle() {
+      const ist = nowInIST();
+      const hour = ist.getHours();
+      const minute = ist.getMinutes();
+      const second = ist.getSeconds();
+
+      // update visible current time
+      nowText.textContent = formatTime(ist) + ' IST';
+
+      const isOpen = (hour >= OPEN_HOUR && hour < CLOSE_HOUR);
+
+      if (isOpen) {
+        iframe.classList.remove('hidden');
+        overlay.classList.add('hidden');
+        overlay.setAttribute('aria-hidden', 'true');
+      } else {
+        iframe.classList.add('hidden');
+        overlay.classList.remove('hidden');
+        overlay.setAttribute('aria-hidden', 'false');
+
+        // compute next opening (09:00 IST)
+        let nextOpen = new Date(ist);
+        if (hour < OPEN_HOUR) {
+          nextOpen.setHours(OPEN_HOUR, 0, 0, 0); // today at 09:00
+        } else {
+          // after or at/after CLOSE_HOUR -> tomorrow at 09:00
+          nextOpen.setDate(nextOpen.getDate() + 1);
+          nextOpen.setHours(OPEN_HOUR, 0, 0, 0);
+        }
+        // convert difference in ms
+        const diffMs = nextOpen.getTime() - ist.getTime();
+        const hoursLeft = Math.floor(diffMs / (1000 * 60 * 60));
+        const minutesLeft = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        const secondsLeft = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+        countdownEl.textContent = `Opens in ${String(hoursLeft).padStart(2,'0')}h:${String(minutesLeft).padStart(2,'0')}m:${String(secondsLeft).padStart(2,'0')}s`;
       }
-      // Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+U
-      if (
-        (e.ctrlKey && e.shiftKey && ['I', 'J'].includes(e.key)) ||
-        (e.ctrlKey && e.key === 'U')
-      ) {
+    }
+
+    // run immediately and then every 1 second
+    checkAndToggle();
+    setInterval(checkAndToggle, 1000);
+
+    // === Optional: preserve your existing DevTools-blocking bits (kept minimal) ===
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'F12') e.preventDefault();
+      if ((e.ctrlKey && e.shiftKey && ['I','J'].includes(e.key)) || (e.ctrlKey && e.key === 'U')) {
         e.preventDefault();
       }
     });
 
-    // Detect DevTools open by checking dimensions
+    // DevTools detection (non-reliable; kept for UX)
     let devtoolsOpen = false;
     const threshold = 160;
     setInterval(() => {
-      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-      if (widthThreshold || heightThreshold) {
-        if (!devtoolsOpen) {
-          devtoolsOpen = true;
-          alert("DevTools is not allowed on this page.");
-          window.location.href = "about:blank"; // Optional: redirect or block access
+      try {
+        const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+        const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+        if (widthThreshold || heightThreshold) {
+          if (!devtoolsOpen) {
+            devtoolsOpen = true;
+            // Instead of aggressive redirect, just show a polite message
+            overlay.classList.remove('hidden');
+            overlay.setAttribute('aria-hidden','false');
+            document.getElementById('status-text').textContent = 'DevTools is not allowed on this page. Please close DevTools to continue.';
+            iframe.classList.add('hidden');
+          }
+        } else {
+          if (devtoolsOpen) {
+            devtoolsOpen = false;
+            // let checkAndToggle decide visibility again
+            checkAndToggle();
+            document.getElementById('status-text').textContent = 'Current time:';
+          }
         }
-      } else {
-        devtoolsOpen = false;
-      }
+      } catch (e) { /* ignore detection errors */ }
     }, 1000);
   </script>
 </body>
